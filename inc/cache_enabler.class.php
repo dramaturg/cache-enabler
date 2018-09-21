@@ -192,13 +192,13 @@ final class Cache_Enabler {
 
 		// act WPML translation
         add_action(
-          'ce_action_cache_by_post_id_cleared',
+          'ce_action_cache_by_url_cleared',
 			array(
 				__CLASS__,
-				'wpml_clear_page_cache_by_post_id',
+				'wpml_clear_page_cache_by_url',
 			),
 			10,
-            2
+            1
         );
 
 		// add admin clear link
@@ -1257,8 +1257,45 @@ final class Cache_Enabler {
 		// clear cache by URL
 		self::clear_page_cache_by_url( $permalink );
 
+		//clear cache archive page
+		self::clear_page_archive_by_post_id($post_ID);
+
 		// clear cache by post id hook
 		do_action('ce_action_cache_by_post_id_cleared', $post_ID, $permalink);
+	}
+
+
+	/**
+	 * clear page archive cache by post id
+	 *
+	 * @since   1.3.0
+	 *
+	 * @param integer  $post_ID  Post ID
+	 */
+	public static function clear_page_archive_by_post_id($post_ID) {
+
+		$post_type = get_post_type($post_ID);
+		$post_taxonomies = get_object_taxonomies($post_type);
+
+		$post_urls = array(
+			get_post_type_archive_link( $post_type )
+		);
+
+		foreach ($post_taxonomies as $post_taxonomy) {
+			$post_terms = get_the_terms ($post_ID, $post_taxonomy );
+
+			foreach ($post_terms as $post_term) {
+				$post_urls[] = get_term_link($post_term, $post_taxonomy);
+			}
+		}
+
+
+		// clear cache by URL
+		foreach ($post_urls as $post_url) {
+
+			// clear cache by URL
+			self::clear_page_cache_by_url( $post_url );
+		}
 	}
 
 
@@ -1610,25 +1647,36 @@ final class Cache_Enabler {
 
 
 	/**
-	 * Act on WPML clear cache by post id
+	 * Act on WPML clear cache by url
 	 *
 	 * @since 1.3.0
 	 */
-	public static function wpml_clear_page_cache_by_post_id( $post_ID, $permallink ) {
+	public static function wpml_clear_page_cache_by_url( $url ) {
+
+		global $sitepress;
+
+		if ( !$sitepress || !is_a($sitepress, 'SitePress') || !method_exists('SitePress', 'convert_url') ) {
+           return;
+		}
 
 		$lang_array = apply_filters( 'wpml_active_languages', NULL, 'skip_missing=0&orderby=code');
 
 		if( is_array($lang_array) ){
 
+		    remove_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
+
 			foreach ( $lang_array as $code => $lang ) {
 
 				if (ICL_LANGUAGE_CODE !== $code) {
 
-					$tr_url = apply_filters('wpml_permalink', $permallink, $code, true);;
+					$tr_url = $sitepress->convert_url($url, $code);
 
 					self::clear_page_cache_by_url($tr_url);
+
 				}
 			}
+
+			add_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
 		}
 	}
 
