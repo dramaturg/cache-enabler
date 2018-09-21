@@ -2144,7 +2144,7 @@ final class Cache_Enabler {
 
                             <label for="cache_wc_product_stock">
                                 <input type="checkbox" name="cache-enabler[wc_product_stock]" id="cache_wc_product_stock" value="1" <?php checked('1', $options['wc_product_stock']); ?> />
-								<?php _e("Clear the complete cache if product stock is updated.", "cache-enabler") ?>
+								<?php _e("Clear the complete cache if product stock is updated otherwise only product cache is clear.", "cache-enabler") ?>
                             </label>
                         </fieldset>
                     </td>
