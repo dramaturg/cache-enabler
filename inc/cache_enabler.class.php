@@ -1252,13 +1252,13 @@ final class Cache_Enabler {
 			return;
 		}
 
+		$permalink = get_permalink( $post_ID );
+
 		// clear cache by URL
-		self::clear_page_cache_by_url(
-			get_permalink( $post_ID )
-		);
+		self::clear_page_cache_by_url( $permalink );
 
 		// clear cache by post id hook
-		do_action('ce_action_cache_by_post_id_cleared', $post_ID);
+		do_action('ce_action_cache_by_post_id_cleared', $post_ID, $permalink);
 	}
 
 
