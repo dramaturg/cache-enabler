@@ -1561,10 +1561,10 @@ final class Cache_Enabler {
 
 	public static function woocommerce_product_set_stock_status($product_id) {
 
-		if ( self::$options['wc_product_stock'] ) {
-			self::clear_page_cache_by_post_id($product_id);
-		} else {
+		if ( !self::$options['wc_product_stock'] ) {
 			self::clear_total_cache();
+		} else {
+			self::clear_page_cache_by_post_id($product_id);
 		}
 	}
 
@@ -1585,10 +1585,10 @@ final class Cache_Enabler {
 				);
 
 
-				if ( $current_action ) {
-					self::clear_page_cache_by_post_id($product_id);
-				} else {
+				if ( !$current_action ) {
 					self::clear_total_cache();
+				} else {
+					self::clear_page_cache_by_post_id($product_id);
 				}
 			}
 		}
@@ -2038,6 +2038,7 @@ final class Cache_Enabler {
 			'new_comment'       => (int)(!empty($data['new_comment'])),
 			'webp'              => (int)(!empty($data['webp'])),
 			'clear_on_upgrade'  => (int)(!empty($data['clear_on_upgrade'])),
+			'wc_product_stock'  => (int)(!empty($data['wc_product_stock'])),
 			'compress'          => (int)(!empty($data['compress'])),
 			'excl_ids'          => (string)sanitize_text_field(@$data['excl_ids']),
 			'excl_regexp'       => (string)self::validate_regexps(@$data['excl_regexp']),
