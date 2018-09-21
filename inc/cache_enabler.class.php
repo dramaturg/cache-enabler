@@ -197,7 +197,8 @@ final class Cache_Enabler {
 				__CLASS__,
 				'wpml_clear_page_cache_by_post_id',
 			),
-			10
+			10,
+            2
         );
 
 		// add admin clear link
@@ -1613,37 +1614,24 @@ final class Cache_Enabler {
 	 *
 	 * @since 1.3.0
 	 */
-	public static function wpml_clear_page_cache_by_post_id( $post_ID ) {
-
-		// is int
-		if ( ! $post_ID = absint($post_ID) ) {
-			return;
-		}
-
-		$translated_ids = false;
-		$element_type = get_post_type($post_ID);
+	public static function wpml_clear_page_cache_by_post_id( $post_ID, $permallink ) {
 
 		$lang_array = apply_filters( 'wpml_active_languages', NULL, 'skip_missing=0&orderby=code');
 
 		if( is_array($lang_array) ){
 
-			foreach ( $lang_array as $lang ) {
+			foreach ( $lang_array as $code => $lang ) {
 
-				$translated_pid = apply_filters('wpml_object_id', $post_ID, $element_type, false, $lang['language_code']);
+				if (ICL_LANGUAGE_CODE !== $code) {
 
-				if ($translated_pid !== $post_ID ) {
+					$tr_url = apply_filters('wpml_permalink', $permallink, $code, true);;
 
-				    //Prevent recursive wpml clear cache by post id
-					remove_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_post_id'), 10 );
-
-					self::clear_page_cache_by_post_id( $translated_pid );
-
-					//Restore action wpml clear cache by post id
-					add_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_post_id'), 10 );
+					self::clear_page_cache_by_url($tr_url);
 				}
 			}
 		}
 	}
+
 
 	/**
 	 * set cache
