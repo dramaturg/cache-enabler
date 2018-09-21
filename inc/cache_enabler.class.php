@@ -190,6 +190,16 @@ final class Cache_Enabler {
 			2
 		);
 
+		// act WPML translation
+        add_action(
+          'ce_action_cache_by_post_id_cleared',
+			array(
+				__CLASS__,
+				'wpml_clear_page_cache_by_post_id',
+			),
+			10
+        );
+
 		// add admin clear link
 		add_action(
 			'admin_bar_menu',
@@ -1245,6 +1255,9 @@ final class Cache_Enabler {
 		self::clear_page_cache_by_url(
 			get_permalink( $post_ID )
 		);
+
+		// clear cache by post id hook
+		do_action('ce_action_cache_by_post_id_cleared', $post_ID);
 	}
 
 
@@ -1273,7 +1286,7 @@ final class Cache_Enabler {
 		);
 
 		// clear cache by url post hook
-		do_action('ce_action_cache_by_url_cleared');
+		do_action('ce_action_cache_by_url_cleared', $url);
 	}
 
 
@@ -1594,6 +1607,43 @@ final class Cache_Enabler {
 		}
 	}
 
+
+	/**
+	 * Act on WPML clear cache by post id
+	 *
+	 * @since 1.3.0
+	 */
+	public static function wpml_clear_page_cache_by_post_id( $post_ID ) {
+
+		// is int
+		if ( ! $post_ID = absint($post_ID) ) {
+			return;
+		}
+
+		$translated_ids = false;
+		$element_type = get_post_type($post_ID);
+
+		$lang_array = apply_filters( 'wpml_active_languages', NULL, 'skip_missing=0&orderby=code');
+
+		if( is_array($lang_array) ){
+
+			foreach ( $lang_array as $lang ) {
+
+				$translated_pid = apply_filters('wpml_object_id', $post_ID, $element_type, false, $lang['language_code']);
+
+				if ($translated_pid !== $post_ID ) {
+
+				    //Prevent recursive wpml clear cache by post id
+					remove_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_post_id'), 10 );
+
+					self::clear_page_cache_by_post_id( $translated_pid );
+
+					//Restore action wpml clear cache by post id
+					add_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_post_id'), 10 );
+				}
+			}
+		}
+	}
 
 	/**
 	 * set cache
