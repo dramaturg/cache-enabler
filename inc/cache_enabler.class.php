@@ -1653,29 +1653,25 @@ final class Cache_Enabler {
 	 */
 	public static function wpml_clear_page_cache_by_url( $url ) {
 
-		global $sitepress;
-
-		if ( !$sitepress || !is_a($sitepress, 'SitePress') || !method_exists('SitePress', 'convert_url') ) {
-           return;
-		}
-
 		$lang_array = apply_filters( 'wpml_active_languages', NULL, 'skip_missing=0&orderby=code');
 
 		if( is_array($lang_array) ){
 
+		    //Prevent recursive clear_page_cache_by_url
 		    remove_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
 
 			foreach ( $lang_array as $code => $lang ) {
 
 				if (ICL_LANGUAGE_CODE !== $code) {
 
-					$tr_url = $sitepress->convert_url($url, $code);
+					$tr_url = apply_filters( 'wpml_permalink', $url, $code, true );
 
 					self::clear_page_cache_by_url($tr_url);
 
 				}
 			}
 
+			//Restore wpml action
 			add_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
 		}
 	}
