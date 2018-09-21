@@ -1268,7 +1268,7 @@ final class Cache_Enabler {
 	/**
 	 * clear page archive cache by post id
 	 *
-	 * @since   1.3.0
+	 * @since   1.3.2
 	 *
 	 * @param integer  $post_ID  Post ID
 	 */
@@ -1619,6 +1619,12 @@ final class Cache_Enabler {
 		}
 	}
 
+	/**
+     * @since 1.3.2
+     *
+	 * @param $variation_id
+	 * @param $i
+	 */
 	public static function woocommerce_save_product_variation($variation_id, $i) {
 
 		//Clear cache only on time
@@ -1649,7 +1655,7 @@ final class Cache_Enabler {
 	/**
 	 * Act on WPML clear cache by url
 	 *
-	 * @since 1.3.0
+	 * @since 1.3.2
 	 */
 	public static function wpml_clear_page_cache_by_url( $url ) {
 

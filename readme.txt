@@ -68,6 +68,14 @@ When combined with Optimus, the Wordpress Cache Enabler allows you to easily del
 
 == Changelog ==
 
+= 1.3.2
+* Add support clear cache woocommerce variation.
+* Add archive page clear cache by post id.
+* Add option clear all on woocommerce stock update.
+* Add support clear cache for WPML.
+* Add param url on action "ce_action_cache_by_url_cleared"
+* Add params post id and permalink on action "ce_action_cache_by_post_id_cleared"
+
 = 1.3.1
 * Fix for missing trailing slashes was incomplete
 * Add filter option before minification
