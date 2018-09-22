@@ -1276,6 +1276,7 @@ final class Cache_Enabler {
 
 		$post_type = get_post_type($post_ID);
 		$post_taxonomies = get_object_taxonomies($post_type);
+		$site_url = trailingslashit(get_site_url());
 
 		$post_urls = array(
 			get_post_type_archive_link( $post_type )
@@ -1289,7 +1290,7 @@ final class Cache_Enabler {
 				$post_term_url = get_term_link($post_term, $post_taxonomy);
 				$_clean_url = trailingslashit(strtok($post_term_url, '?'));
 
-				if ($_clean_url !== trailingslashit(get_site_url())) {
+				if ($_clean_url !== $site_url) {
 					$post_urls[] = $_clean_url;
 				}
 			}
