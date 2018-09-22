@@ -1285,7 +1285,13 @@ final class Cache_Enabler {
 			$post_terms = get_the_terms ($post_ID, $post_taxonomy );
 
 			foreach ($post_terms as $post_term) {
-				$post_urls[] = get_term_link($post_term, $post_taxonomy);
+
+				$post_term_url = get_term_link($post_term, $post_taxonomy);
+				$_clean_url = trailingslashit(strtok($post_term_url, '?'));
+
+				if ($_clean_url !== trailingslashit(get_site_url())) {
+					$post_urls[] = $_clean_url;
+				}
 			}
 		}
 
