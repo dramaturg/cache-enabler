@@ -198,14 +198,15 @@ final class Cache_Enabler {
 			1
 		);
 		add_action(
-			'woocommerce_save_product_variation',
+			'woocommerce_update_product',
 			array(
 				__CLASS__,
-				'woocommerce_save_product_variation',
+				'woocommerce_update_product',
 			),
 			10,
-			2
+			1
 		);
+
 
 		// act WPML translation
 		add_action(
@@ -1332,18 +1333,20 @@ final class Cache_Enabler {
 
 			$post_terms = get_the_terms ($post_ID, $post_taxonomy );
 
-			foreach ($post_terms as $post_term) {
+			if ( is_array($post_terms) ) {
+				foreach ($post_terms as $post_term) {
 
-				$post_term_url = get_term_link($post_term, $post_taxonomy);
+					$post_term_url = get_term_link($post_term, $post_taxonomy);
 
-				if ( is_wp_error($post_term_url) ) {
-					continue;
-				}
+					if ( is_wp_error($post_term_url) ) {
+						continue;
+					}
 
-				$_clean_url = trailingslashit(strtok($post_term_url, '?'));
+					$_clean_url = trailingslashit(strtok($post_term_url, '?'));
 
-				if ($_clean_url !== $site_url) {
-					self::clear_page_cache_by_url( $_clean_url );
+					if ($_clean_url !== $site_url) {
+						self::clear_page_cache_by_url( $_clean_url );
+					}
 				}
 			}
 		}
@@ -1696,34 +1699,35 @@ final class Cache_Enabler {
 		}
 	}
 
-	/**
-	 * @since 1.3.2
-	 *
-	 * @param $variation_id
-	 * @param $i
-	 */
-	public static function woocommerce_save_product_variation($variation_id, $i) {
+	public static function woocommerce_save_product( $product_ID ) {
 
-		//Clear cache only on time
-		if ($i == 0) {
+		// is int
+		if ( ! $product_ID = absint( $product_ID ) ) {
+			return;
+		}
 
-			$product_id = wp_get_post_parent_id($variation_id);
-
-			if ($product_id) {
-
-				// get current action
-				$current_action = (int)get_user_meta(
-					get_current_user_id(),
-					'_clear_post_cache_on_update',
-					true
-				);
+		// get current action
+		$current_action = (int)get_user_meta(
+			get_current_user_id(),
+			'_clear_post_cache_on_update',
+			true
+		);
 
 
-				if ( !$current_action ) {
-					self::clear_total_cache();
-				} else {
-					self::clear_page_cache_by_post_id($product_id);
-				}
+		if ( !$current_action ) {
+			self::clear_total_cache();
+		} else {
+			$product = wc_get_product( $product_ID );
+
+			$product_ids = array($product_ID);
+			//$product_ids = wp_parse_args( wc_get_related_products($product_ID), $product_ids);
+			$product_ids = wp_parse_args( array_map('absint', $product->get_upsell_ids), $product_ids);
+			$product_ids = wp_parse_args( array_map('absint', $product->get_cross_sell_ids), $product_ids);
+
+			$product_ids = array_unique($product_ids);
+
+			foreach ($product_ids as $id) {
+				self::clear_page_cache_by_post_id($id);
 			}
 		}
 	}
