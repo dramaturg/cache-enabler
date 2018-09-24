@@ -75,6 +75,8 @@ When combined with Optimus, the Wordpress Cache Enabler allows you to easily del
 * Add support clear cache for WPML.
 * Add param url on action "ce_action_cache_by_url_cleared"
 * Add params post id and permalink on action "ce_action_cache_by_post_id_cleared"
+* Remove clear_home class disk.
+* Add compatibility home in _clear_dir.
 
 = 1.3.1
 * Fix for missing trailing slashes was incomplete

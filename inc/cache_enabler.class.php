@@ -8,7 +8,14 @@ defined('ABSPATH') OR exit;
 /**
  * Cache_Enabler
  *
+ * - Compatibility WPML
+ * - Compatibility Woocommerce
+ * - Change Clear cache home page with clear cache by url.
+ * - Add option for remove cache ids on edit post type.
+ * - Add option for stock woocommerce.
+ *
  * @since 1.0.0
+ * @change 1.3.2
  */
 
 final class Cache_Enabler {
@@ -143,6 +150,16 @@ final class Cache_Enabler {
 				'on_upgrade_hook'
 			), 10, 2);
 
+		add_action(
+			'ce_action_cache_by_post_id_cleared',
+			array(
+				__CLASS__,
+				'cache_clear_ids_on_clear_by_post_id',
+			),
+			10,
+			2
+		);
+
 		// act on woocommerce actions
 		add_action(
 			'woocommerce_product_set_stock',
@@ -191,15 +208,25 @@ final class Cache_Enabler {
 		);
 
 		// act WPML translation
-        add_action(
-          'ce_action_cache_by_url_cleared',
+		add_action(
+			'ce_action_cache_by_post_id_cleared',
+			array(
+				__CLASS__,
+				'wpml_clear_page_cache_by_post_id',
+			),
+			10,
+			2
+		);
+
+		add_action(
+			'ce_action_cache_by_url_cleared',
 			array(
 				__CLASS__,
 				'wpml_clear_page_cache_by_url',
 			),
 			10,
-            1
-        );
+			1
+		);
 
 		// add admin clear link
 		add_action(
@@ -676,6 +703,11 @@ final class Cache_Enabler {
 			);
 		}
 
+		foreach (get_post_types(array('public' => true)) as $post_type) {
+			$clear_ids_on_clear_by_post_id[$post_type] = '';
+		}
+
+
 		return wp_parse_args(
 			get_option('cache-enabler'),
 			array(
@@ -685,6 +717,8 @@ final class Cache_Enabler {
 				'compress'          => 0,
 				'webp'              => 0,
 				'clear_on_upgrade'  => 0,
+				'clear_home_on_clear_by_post_id'  => 0,
+				'clear_ids_on_clear_by_post_id'  => $clear_ids_on_clear_by_post_id,
 				'wc_product_stock'  => 0,
 				'excl_ids'          => '',
 				'excl_regexp'       => '',
@@ -1248,7 +1282,7 @@ final class Cache_Enabler {
 	public static function clear_page_cache_by_post_id($post_ID) {
 
 		// is int
-		if ( ! $post_ID = (int)$post_ID ) {
+		if ( ! $post_ID = absint( $post_ID ) ) {
 			return;
 		}
 
@@ -1259,6 +1293,11 @@ final class Cache_Enabler {
 
 		//clear cache archive page
 		self::clear_page_archive_by_post_id($post_ID);
+
+		//clear home page
+		if ( self::$options['clear_home_on_clear_by_post_id'] ) {
+			self::clear_home_page_cache();
+		}
 
 		// clear cache by post id hook
 		do_action('ce_action_cache_by_post_id_cleared', $post_ID, $permalink);
@@ -1272,36 +1311,41 @@ final class Cache_Enabler {
 	 *
 	 * @param integer  $post_ID  Post ID
 	 */
-	public static function clear_page_archive_by_post_id($post_ID) {
+	public static function clear_page_archive_by_post_id( $post_ID ) {
+
+		// is int
+		if ( ! $post_ID = absint( $post_ID ) ) {
+			return;
+		}
 
 		$post_type = get_post_type($post_ID);
-		$post_taxonomies = get_object_taxonomies($post_type);
+		$post_taxonomies = get_taxonomies(array('object_type' => array($post_type), 'public' => true));
 		$site_url = trailingslashit(get_site_url());
 
-		$post_urls = array(
-			get_post_type_archive_link( $post_type )
-		);
+		$post_archive_link = get_post_type_archive_link( $post_type );
+
+		if ($post_archive_link) {
+			self::clear_page_cache_by_url( $post_archive_link );
+		}
 
 		foreach ($post_taxonomies as $post_taxonomy) {
+
 			$post_terms = get_the_terms ($post_ID, $post_taxonomy );
 
 			foreach ($post_terms as $post_term) {
 
 				$post_term_url = get_term_link($post_term, $post_taxonomy);
+
+				if ( is_wp_error($post_term_url) ) {
+					continue;
+				}
+
 				$_clean_url = trailingslashit(strtok($post_term_url, '?'));
 
 				if ($_clean_url !== $site_url) {
-					$post_urls[] = $_clean_url;
+					self::clear_page_cache_by_url( $_clean_url );
 				}
 			}
-		}
-
-
-		// clear cache by URL
-		foreach ($post_urls as $post_url) {
-
-			// clear cache by URL
-			self::clear_page_cache_by_url( $post_url );
 		}
 	}
 
@@ -1345,15 +1389,12 @@ final class Cache_Enabler {
 
 	public static function clear_home_page_cache() {
 
-		call_user_func(
-			array(
-				self::$disk,
-				'clear_home'
-			)
-		);
+		$url = trailingslashit(get_site_url());
+
+		self::clear_page_cache_by_url($url);
 
 		// clear home page cache post hook
-		do_action('ce_action_home_page_cache_cleared');
+		do_action('ce_action_home_page_cache_cleared', $url);
 	}
 
 
@@ -1608,12 +1649,41 @@ final class Cache_Enabler {
 
 
 	/**
+	 * Cache clear ids on clear by post id
+	 */
+	public static function cache_clear_ids_on_clear_by_post_id( $post_ID,  $permalink) {
+
+		// is int
+		if ( ! $post_ID = absint( $post_ID ) ) {
+			return;
+		}
+
+		$post_type = get_post_type($post_ID);
+
+		if ( !empty(self::$options['clear_ids_on_clear_by_post_id'][$post_type]) ) {
+
+			$additional_ids = (array)explode(',', self::$options['clear_ids_on_clear_by_post_id'][$post_type]);
+
+			//Prevent recursive clear_page_cache_by_post_id
+			remove_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'cache_clear_ids_on_clear_by_post_id'), 10, 2);
+
+			foreach ($additional_ids as $additional_id) {
+
+				self::clear_page_cache_by_post_id( absint($additional_id) );
+			}
+
+			add_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'cache_clear_ids_on_clear_by_post_id'), 10, 2);
+		}
+	}
+
+	/**
 	 * Act on WooCommerce stock changes
 	 *
 	 * @since 1.3.0
 	 */
 
 	public static function woocommerce_product_set_stock($product) {
+
 		self::woocommerce_product_set_stock_status($product->get_id());
 	}
 
@@ -1627,8 +1697,8 @@ final class Cache_Enabler {
 	}
 
 	/**
-     * @since 1.3.2
-     *
+	 * @since 1.3.2
+	 *
 	 * @param $variation_id
 	 * @param $i
 	 */
@@ -1664,23 +1734,71 @@ final class Cache_Enabler {
 	 *
 	 * @since 1.3.2
 	 */
-	public static function wpml_clear_page_cache_by_url( $url ) {
+	public static function wpml_clear_page_cache_by_post_id( $post_ID, $permalink ) {
+
+		// is int
+		if ( ! $post_ID = absint( $post_ID ) ) {
+			return;
+		}
 
 		$lang_array = apply_filters( 'wpml_active_languages', NULL, 'skip_missing=0&orderby=code');
 
 		if( is_array($lang_array) ){
 
-		    //Prevent recursive clear_page_cache_by_url
-		    remove_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
+			$post_type = get_post_type($post_ID);
+
+			//Prevent recursive clear_page_cache_by_post_id
+			remove_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_post_id'), 10, 2);
 
 			foreach ( $lang_array as $code => $lang ) {
 
 				if (ICL_LANGUAGE_CODE !== $code) {
 
-					$tr_url = apply_filters( 'wpml_permalink', $url, $code, true );
+					$tr_post_ID = apply_filters( 'wpml_object_id', $post_ID, $post_type, true, $code );
 
-					self::clear_page_cache_by_url($tr_url);
+					self::clear_page_cache_by_post_id($tr_post_ID);
 
+				}
+			}
+
+			//Restore wpml action
+			add_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_post_id'), 10, 2);
+		}
+	}
+
+
+	/**
+	 * Act on WPML clear cache by url
+	 *
+	 * @since 1.3.2
+	 */
+	public static function wpml_clear_page_cache_by_url( $url = null ) {
+
+		$lang_array = apply_filters( 'wpml_active_languages', NULL, 'skip_missing=0&orderby=code');
+
+		if( is_array($lang_array) ){
+
+			$size_url = strlen($url);
+			$site_url = trailingslashit(get_site_url());
+
+			if ( !is_string($url) || !$size_url ) {
+				$url = $site_url;
+			}
+
+			$is_abs_url = $site_url === $url ? false : true;
+
+			//Prevent recursive clear_page_cache_by_url
+			remove_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
+
+			foreach ( $lang_array as $code => $lang ) {
+
+				if (ICL_LANGUAGE_CODE !== $code) {
+
+					$tr_url = apply_filters( 'wpml_permalink', $url, $code, $is_abs_url );
+
+					if ($tr_url != $url) {
+						self::clear_page_cache_by_url($tr_url);
+					}
 				}
 			}
 
@@ -2127,12 +2245,22 @@ final class Cache_Enabler {
 			Cache_Enabler_Disk::delete_advcache_settings(array("excl_cookies"));
 		}
 
+
+		$clear_ids_post_types = array();
+
+		foreach ((array)$data['clear_ids_on_clear_by_post_id'] as $clear_ids_post_type => $ids) {
+			$clear_ids_post_types[$clear_ids_post_type] = (string)sanitize_text_field(@$ids);
+		}
+
+
 		return array(
 			'expires'           => (int)$data['expires'],
 			'new_post'          => (int)(!empty($data['new_post'])),
 			'new_comment'       => (int)(!empty($data['new_comment'])),
 			'webp'              => (int)(!empty($data['webp'])),
 			'clear_on_upgrade'  => (int)(!empty($data['clear_on_upgrade'])),
+			'clear_home_on_clear_by_post_id' => (int)(!empty($data['clear_home_on_clear_by_post_id'])),
+			'clear_ids_on_clear_by_post_id' => $clear_ids_post_types,
 			'wc_product_stock'  => (int)(!empty($data['wc_product_stock'])),
 			'compress'          => (int)(!empty($data['compress'])),
 			'excl_ids'          => (string)sanitize_text_field(@$data['excl_ids']),
@@ -2237,10 +2365,36 @@ final class Cache_Enabler {
 
                             <br />
 
+                            <label for="clear_home_on_clear_by_post_id">
+                                <input type="checkbox" name="cache-enabler[clear_home_on_clear_by_post_id]" id="clear_home_on_clear_by_post_id" value="1" <?php checked('1', $options['clear_home_on_clear_by_post_id']); ?> />
+								<?php _e("Clear the home page cache on post id cache clear.", "cache-enabler") ?>
+                            </label>
+
+                            <br />
+
                             <label for="cache_wc_product_stock">
                                 <input type="checkbox" name="cache-enabler[wc_product_stock]" id="cache_wc_product_stock" value="1" <?php checked('1', $options['wc_product_stock']); ?> />
 								<?php _e("Clear the complete cache if product stock is updated otherwise only product cache is clear.", "cache-enabler") ?>
                             </label>
+
+                        </fieldset>
+                    </td>
+                </tr>
+
+                <tr valign="top">
+                    <th scope="row">
+						<?php _e("Cache clear post types", "cache-enabler") ?>
+                    </th>
+                    <td>
+                        <fieldset>
+							<?php foreach (get_post_types(array('public' => true)) as $post_type) : ?>
+                                <label for="clear_ids_on_clear_by_post_id_<?php echo esc_attr($post_type) ?>">
+                                    <input type="text" name="cache-enabler[clear_ids_on_clear_by_post_id][<?php echo esc_attr($post_type) ?>]" id="clear_ids_on_clear_by_post_id_<?php echo esc_attr($post_type) ?>" value="<?php echo esc_attr($options['clear_ids_on_clear_by_post_id'][$post_type]) ?>" />
+                                    <p class="description"><?php printf( __("Additional IDs clear on edit %s. Separated by a <code>,</code> that should not be cached.", "cache-enabler"), esc_html($post_type) ); ?></p>
+                                </label>
+
+                                <br />
+							<?php endforeach; ?>
                         </fieldset>
                     </td>
                 </tr>
