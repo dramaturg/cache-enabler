@@ -1746,19 +1746,35 @@ final class Cache_Enabler {
 		if( is_array($lang_array) ){
 
 			$post_type = get_post_type($post_ID);
+			$current_lang = apply_filters( 'wpml_current_language',  ICL_LANGUAGE_CODE);
+			$has_action_wpml_translate_url = has_action('ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url')) ? true : false;
 
 			//Prevent recursive clear_page_cache_by_post_id
 			remove_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_post_id'), 10, 2);
 
+			if ( $has_action_wpml_translate_url ) {
+				//Remove wpml translate url. This resolve translate id and switch language for resolve permalink by clear_page_cache_by_post_id
+				remove_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
+			}
+
 			foreach ( $lang_array as $code => $lang ) {
 
-				if (ICL_LANGUAGE_CODE !== $code) {
+				$tr_post_ID = apply_filters( 'wpml_object_id', $post_ID, $post_type, true, $code );
 
-					$tr_post_ID = apply_filters( 'wpml_object_id', $post_ID, $post_type, true, $code );
+				if ($tr_post_ID != $post_ID) {
+
+					//Switch language
+					do_action( 'wpml_switch_language', $code );
 
 					self::clear_page_cache_by_post_id($tr_post_ID);
-
 				}
+			}
+
+			//Restore language
+			do_action( 'wpml_switch_language', $current_lang );
+
+			if ( $has_action_wpml_translate_url ) {
+				add_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
 			}
 
 			//Restore wpml action
@@ -1790,9 +1806,11 @@ final class Cache_Enabler {
 			//Prevent recursive clear_page_cache_by_url
 			remove_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
 
+			$current_lang = apply_filters( 'wpml_current_language',  ICL_LANGUAGE_CODE);
+
 			foreach ( $lang_array as $code => $lang ) {
 
-				if (ICL_LANGUAGE_CODE !== $code) {
+				if ($current_lang !== $code) {
 
 					$tr_url = apply_filters( 'wpml_permalink', $url, $code, $is_abs_url );
 
