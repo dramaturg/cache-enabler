@@ -68,6 +68,9 @@ When combined with Optimus, the Wordpress Cache Enabler allows you to easily del
 
 == Changelog ==
 
+= 1.3.3
+* Fix return 304.
+
 = 1.3.2
 * Add support clear cache woocommerce variation.
 * Add archive page clear cache by post id.
