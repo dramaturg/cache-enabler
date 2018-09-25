@@ -8,12 +8,6 @@ defined('ABSPATH') OR exit;
 /**
  * Cache_Enabler
  *
- * - Compatibility WPML
- * - Compatibility Woocommerce
- * - Change Clear cache home page with clear cache by url.
- * - Add option for remove cache ids on edit post type.
- * - Add option for stock woocommerce.
- *
  * @since 1.0.0
  * @change 1.3.2
  */
@@ -42,6 +36,16 @@ final class Cache_Enabler {
 
 
 	/**
+	 * cleaner cache object
+	 *
+	 * @since  1.3.2
+	 * @var    object
+	 */
+
+	private static $cleaner = array();
+
+
+	/**
 	 * minify default settings
 	 *
 	 * @since  1.0.0
@@ -57,11 +61,13 @@ final class Cache_Enabler {
 	 * constructor wrapper
 	 *
 	 * @since   1.0.0
-	 * @change  1.0.0
+	 * @change  1.3.2
 	 */
 
 	public static function instance()
 	{
+		new Cache_Enabler_Autoloader(plugin_dir_path( dirname(__FILE__) ) . 'compatibility/');
+
 		new self();
 	}
 
@@ -150,84 +156,6 @@ final class Cache_Enabler {
 				'on_upgrade_hook'
 			), 10, 2);
 
-		add_action(
-			'ce_action_cache_by_post_id_cleared',
-			array(
-				__CLASS__,
-				'cache_clear_ids_on_clear_by_post_id',
-			),
-			10,
-			2
-		);
-
-		// act on woocommerce actions
-		add_action(
-			'woocommerce_product_set_stock',
-			array(
-				__CLASS__,
-				'woocommerce_product_set_stock',
-			),
-			10,
-			1
-		);
-		add_action(
-			'woocommerce_product_set_stock_status',
-			array(
-				__CLASS__,
-				'woocommerce_product_set_stock_status',
-			),
-			10,
-			1
-		);
-		add_action(
-			'woocommerce_variation_set_stock',
-			array(
-				__CLASS__,
-				'woocommerce_product_set_stock',
-			),
-			10,
-			1
-		);
-		add_action(
-			'woocommerce_variation_set_stock_status',
-			array(
-				__CLASS__,
-				'woocommerce_product_set_stock_status',
-			),
-			10,
-			1
-		);
-		add_action(
-			'woocommerce_update_product',
-			array(
-				__CLASS__,
-				'woocommerce_update_product',
-			),
-			10,
-			1
-		);
-
-
-		// act WPML translation
-		add_action(
-			'ce_action_cache_by_post_id_cleared',
-			array(
-				__CLASS__,
-				'wpml_clear_page_cache_by_post_id',
-			),
-			10,
-			2
-		);
-
-		add_action(
-			'ce_action_cache_by_url_cleared',
-			array(
-				__CLASS__,
-				'wpml_clear_page_cache_by_url',
-			),
-			10,
-			1
-		);
 
 		// add admin clear link
 		add_action(
@@ -680,6 +608,9 @@ final class Cache_Enabler {
 		if ( Cache_Enabler_Disk::is_permalink() ) {
 			self::$disk = new Cache_Enabler_Disk;
 		}
+
+		// cleaner cache
+        self::$cleaner = Cache_Enabler_Cleaner::getInstance();
 	}
 
 
@@ -687,7 +618,7 @@ final class Cache_Enabler {
 	 * get options
 	 *
 	 * @since   1.0.0
-	 * @change  1.2.3
+	 * @change  1.3.2
 	 *
 	 * @return  array  options array
 	 */
@@ -704,8 +635,12 @@ final class Cache_Enabler {
 			);
 		}
 
+		$clear_ids_on_clear_by_post_id= array();
+		$clear_home_on_clear_by_post_id= array();
+
 		foreach (get_post_types(array('public' => true)) as $post_type) {
 			$clear_ids_on_clear_by_post_id[$post_type] = '';
+			$clear_home_on_clear_by_post_id[$post_type] = '';
 		}
 
 
@@ -718,7 +653,7 @@ final class Cache_Enabler {
 				'compress'          => 0,
 				'webp'              => 0,
 				'clear_on_upgrade'  => 0,
-				'clear_home_on_clear_by_post_id'  => 0,
+				'clear_home_on_clear_by_post_id'  => $clear_home_on_clear_by_post_id,
 				'clear_ids_on_clear_by_post_id'  => $clear_ids_on_clear_by_post_id,
 				'wc_product_stock'  => 0,
 				'excl_ids'          => '',
@@ -741,7 +676,7 @@ final class Cache_Enabler {
 
 	public static function warning_is_permalink() {
 
-		if ( !Cache_Enabler_Disk::is_permalink() AND current_user_can('manage_options') ) { ?>
+		if ( !Cache_Enabler_Disk::is_permalink() && current_user_can('manage_options') ) { ?>
 
             <div class="error">
                 <p><?php printf( __('The <b>%s</b> plugin requires a custom permalink structure to start caching properly. Please go to <a href="%s">Permalink</a> to enable it.', 'cache-enabler'), 'Cache Enabler', admin_url( 'options-permalink.php' ) ); ?></p>
@@ -971,7 +906,7 @@ final class Cache_Enabler {
 				// switch blogs
 				foreach ($ids as $id) {
 					switch_to_blog($id);
-					self::clear_page_cache_by_url(home_url());
+					self::clear_page_cache_by_url(home_url('/'));
 				}
 
 				// restore
@@ -993,7 +928,7 @@ final class Cache_Enabler {
 					self::clear_page_cache_by_url($clear_url);
 				} else {
 					// clear specific multisite cache
-					self::clear_page_cache_by_url(home_url());
+					self::clear_page_cache_by_url(home_url('/'));
 
 					// clear notice
 					if ( is_admin() ) {
@@ -1272,10 +1207,42 @@ final class Cache_Enabler {
 
 
 	/**
+     * Cache clear ids on clear by post id
+     *
+	 * @param $post_ID
+	 */
+	public static function cache_clear_post_type_ids_by_post_id( $post_ID ) {
+
+		// is int
+		if ( ! $post_ID = absint( $post_ID ) ) {
+			return;
+		}
+
+		$post_type = get_post_type($post_ID);
+
+		if ( !empty(self::$options['clear_ids_on_clear_by_post_id'][$post_type]) ) {
+
+			$additional_ids = (array)explode(',', self::$options['clear_ids_on_clear_by_post_id'][$post_type]);
+
+			foreach ($additional_ids as $additional_id) {
+
+				self::$cleaner->add_post_id(absint($additional_id));
+			}
+		}
+
+		//clear home page
+		if ( !empty(self::$options['clear_home_on_clear_by_post_id'][$post_type]) ) {
+
+			self::$cleaner->add_url( get_site_url(null, '/') );
+		}
+	}
+
+
+	/**
 	 * clear page cache by post id
 	 *
 	 * @since   1.0.0
-	 * @change  1.0.0
+	 * @change  1.3.2
 	 *
 	 * @param   integer  $post_ID  Post ID
 	 */
@@ -1287,69 +1254,13 @@ final class Cache_Enabler {
 			return;
 		}
 
-		$permalink = get_permalink( $post_ID );
+		self::$cleaner->clean_by_post_id($post_ID);
 
-		// clear cache by URL
-		self::clear_page_cache_by_url( $permalink );
-
-		//clear cache archive page
-		self::clear_page_archive_by_post_id($post_ID);
-
-		//clear home page
-		if ( self::$options['clear_home_on_clear_by_post_id'] ) {
-			self::clear_home_page_cache();
-		}
+		//clear additional ids for the post type
+		self::cache_clear_post_type_ids_by_post_id($post_ID);
 
 		// clear cache by post id hook
-		do_action('ce_action_cache_by_post_id_cleared', $post_ID, $permalink);
-	}
-
-
-	/**
-	 * clear page archive cache by post id
-	 *
-	 * @since   1.3.2
-	 *
-	 * @param integer  $post_ID  Post ID
-	 */
-	public static function clear_page_archive_by_post_id( $post_ID ) {
-
-		// is int
-		if ( ! $post_ID = absint( $post_ID ) ) {
-			return;
-		}
-
-		$post_type = get_post_type($post_ID);
-		$post_taxonomies = get_taxonomies(array('object_type' => array($post_type), 'public' => true));
-		$site_url = trailingslashit(get_site_url());
-
-		$post_archive_link = get_post_type_archive_link( $post_type );
-
-		if ($post_archive_link) {
-			self::clear_page_cache_by_url( $post_archive_link );
-		}
-
-		foreach ($post_taxonomies as $post_taxonomy) {
-
-			$post_terms = get_the_terms ($post_ID, $post_taxonomy );
-
-			if ( is_array($post_terms) ) {
-				foreach ($post_terms as $post_term) {
-
-					$post_term_url = get_term_link($post_term, $post_taxonomy);
-
-					if ( is_wp_error($post_term_url) ) {
-						continue;
-					}
-
-					$_clean_url = trailingslashit(strtok($post_term_url, '?'));
-
-					if ($_clean_url !== $site_url) {
-						self::clear_page_cache_by_url( $_clean_url );
-					}
-				}
-			}
-		}
+		do_action('ce_action_cache_by_post_id_cleared', $post_ID);
 	}
 
 
@@ -1369,13 +1280,7 @@ final class Cache_Enabler {
 			return;
 		}
 
-		call_user_func(
-			array(
-				self::$disk,
-				'delete_asset'
-			),
-			$url
-		);
+		self::$cleaner->clean_by_url($url);
 
 		// clear cache by url post hook
 		do_action('ce_action_cache_by_url_cleared', $url);
@@ -1392,7 +1297,7 @@ final class Cache_Enabler {
 
 	public static function clear_home_page_cache() {
 
-		$url = trailingslashit(get_site_url());
+		$url = get_site_url(null, '/');
 
 		self::clear_page_cache_by_url($url);
 
@@ -1640,193 +1545,14 @@ final class Cache_Enabler {
 		// we need this here to update advanced-cache.php for the 1.2.3 upgrade
 		self::on_upgrade();
 
-		// clear disk cache
-		Cache_Enabler_Disk::clear_cache();
+		// clean all cache
+		self::$cleaner->clean_all();
 
 		// delete transient
 		delete_transient('cache_size');
 
 		// clear cache post hook
 		do_action('ce_action_cache_cleared');
-	}
-
-
-	/**
-	 * Cache clear ids on clear by post id
-	 */
-	public static function cache_clear_ids_on_clear_by_post_id( $post_ID,  $permalink) {
-
-		// is int
-		if ( ! $post_ID = absint( $post_ID ) ) {
-			return;
-		}
-
-		$post_type = get_post_type($post_ID);
-
-		if ( !empty(self::$options['clear_ids_on_clear_by_post_id'][$post_type]) ) {
-
-			$additional_ids = (array)explode(',', self::$options['clear_ids_on_clear_by_post_id'][$post_type]);
-
-			//Prevent recursive clear_page_cache_by_post_id
-			remove_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'cache_clear_ids_on_clear_by_post_id'), 10, 2);
-
-			foreach ($additional_ids as $additional_id) {
-
-				self::clear_page_cache_by_post_id( absint($additional_id) );
-			}
-
-			add_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'cache_clear_ids_on_clear_by_post_id'), 10, 2);
-		}
-	}
-
-	/**
-	 * Act on WooCommerce stock changes
-	 *
-	 * @since 1.3.0
-	 */
-
-	public static function woocommerce_product_set_stock($product) {
-
-		self::woocommerce_product_set_stock_status($product->get_id());
-	}
-
-	public static function woocommerce_product_set_stock_status($product_id) {
-
-		if ( !self::$options['wc_product_stock'] ) {
-			self::clear_total_cache();
-		} else {
-			self::clear_page_cache_by_post_id($product_id);
-		}
-	}
-
-	public static function woocommerce_save_product( $product_ID ) {
-
-		// is int
-		if ( ! $product_ID = absint( $product_ID ) ) {
-			return;
-		}
-
-		// get current action
-		$current_action = (int)get_user_meta(
-			get_current_user_id(),
-			'_clear_post_cache_on_update',
-			true
-		);
-
-
-		if ( !$current_action ) {
-			self::clear_total_cache();
-		} else {
-			$product = wc_get_product( $product_ID );
-
-			$product_ids = array($product_ID);
-			//$product_ids = wp_parse_args( wc_get_related_products($product_ID), $product_ids);
-			$product_ids = wp_parse_args( array_map('absint', $product->get_upsell_ids), $product_ids);
-			$product_ids = wp_parse_args( array_map('absint', $product->get_cross_sell_ids), $product_ids);
-
-			$product_ids = array_unique($product_ids);
-
-			foreach ($product_ids as $id) {
-				self::clear_page_cache_by_post_id($id);
-			}
-		}
-	}
-
-
-	/**
-	 * Act on WPML clear cache by url
-	 *
-	 * @since 1.3.2
-	 */
-	public static function wpml_clear_page_cache_by_post_id( $post_ID, $permalink ) {
-
-		// is int
-		if ( ! $post_ID = absint( $post_ID ) ) {
-			return;
-		}
-
-		$lang_array = apply_filters( 'wpml_active_languages', NULL, 'skip_missing=0&orderby=code');
-
-		if( is_array($lang_array) ){
-
-			$post_type = get_post_type($post_ID);
-			$current_lang = apply_filters( 'wpml_current_language',  ICL_LANGUAGE_CODE);
-			$has_action_wpml_translate_url = has_action('ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url')) ? true : false;
-
-			//Prevent recursive clear_page_cache_by_post_id
-			remove_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_post_id'), 10, 2);
-
-			if ( $has_action_wpml_translate_url ) {
-				//Remove wpml translate url. This resolve translate id and switch language for resolve permalink by clear_page_cache_by_post_id
-				remove_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
-			}
-
-			foreach ( $lang_array as $code => $lang ) {
-
-				$tr_post_ID = apply_filters( 'wpml_object_id', $post_ID, $post_type, true, $code );
-
-				if ($tr_post_ID != $post_ID) {
-
-					//Switch language
-					do_action( 'wpml_switch_language', $code );
-
-					self::clear_page_cache_by_post_id($tr_post_ID);
-				}
-			}
-
-			//Restore language
-			do_action( 'wpml_switch_language', $current_lang );
-
-			if ( $has_action_wpml_translate_url ) {
-				add_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
-			}
-
-			//Restore wpml action
-			add_action( 'ce_action_cache_by_post_id_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_post_id'), 10, 2);
-		}
-	}
-
-
-	/**
-	 * Act on WPML clear cache by url
-	 *
-	 * @since 1.3.2
-	 */
-	public static function wpml_clear_page_cache_by_url( $url = null ) {
-
-		$lang_array = apply_filters( 'wpml_active_languages', NULL, 'skip_missing=0&orderby=code');
-
-		if( is_array($lang_array) ){
-
-			$size_url = strlen($url);
-			$site_url = trailingslashit(get_site_url());
-
-			if ( !is_string($url) || !$size_url ) {
-				$url = $site_url;
-			}
-
-			$is_abs_url = $site_url === $url ? false : true;
-
-			//Prevent recursive clear_page_cache_by_url
-			remove_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
-
-			$current_lang = apply_filters( 'wpml_current_language',  ICL_LANGUAGE_CODE);
-
-			foreach ( $lang_array as $code => $lang ) {
-
-				if ($current_lang !== $code) {
-
-					$tr_url = apply_filters( 'wpml_permalink', $url, $code, $is_abs_url );
-
-					if ($tr_url != $url) {
-						self::clear_page_cache_by_url($tr_url);
-					}
-				}
-			}
-
-			//Restore wpml action
-			add_action( 'ce_action_cache_by_url_cleared', array(__CLASS__, 'wpml_clear_page_cache_by_url'), 10, 1);
-		}
 	}
 
 
@@ -2269,9 +1995,11 @@ final class Cache_Enabler {
 
 
 		$clear_ids_post_types = array();
+		$clear_home_post_types = array();
 
 		foreach ((array)$data['clear_ids_on_clear_by_post_id'] as $clear_ids_post_type => $ids) {
 			$clear_ids_post_types[$clear_ids_post_type] = (string)sanitize_text_field(@$ids);
+			$clear_home_post_types[$clear_ids_post_type] = (int)(!empty($data['clear_ids_on_clear_by_post_id'][$clear_ids_post_type]));
 		}
 
 
@@ -2281,7 +2009,7 @@ final class Cache_Enabler {
 			'new_comment'       => (int)(!empty($data['new_comment'])),
 			'webp'              => (int)(!empty($data['webp'])),
 			'clear_on_upgrade'  => (int)(!empty($data['clear_on_upgrade'])),
-			'clear_home_on_clear_by_post_id' => (int)(!empty($data['clear_home_on_clear_by_post_id'])),
+			'clear_home_on_clear_by_post_id' => $clear_home_post_types,
 			'clear_ids_on_clear_by_post_id' => $clear_ids_post_types,
 			'wc_product_stock'  => (int)(!empty($data['wc_product_stock'])),
 			'compress'          => (int)(!empty($data['compress'])),
@@ -2385,20 +2113,6 @@ final class Cache_Enabler {
 								<?php _e("Clear the complete cache if any plugin has been upgraded.", "cache-enabler") ?>
                             </label>
 
-                            <br />
-
-                            <label for="clear_home_on_clear_by_post_id">
-                                <input type="checkbox" name="cache-enabler[clear_home_on_clear_by_post_id]" id="clear_home_on_clear_by_post_id" value="1" <?php checked('1', $options['clear_home_on_clear_by_post_id']); ?> />
-								<?php _e("Clear the home page cache on post id cache clear.", "cache-enabler") ?>
-                            </label>
-
-                            <br />
-
-                            <label for="cache_wc_product_stock">
-                                <input type="checkbox" name="cache-enabler[wc_product_stock]" id="cache_wc_product_stock" value="1" <?php checked('1', $options['wc_product_stock']); ?> />
-								<?php _e("Clear the complete cache if product stock is updated otherwise only product cache is clear.", "cache-enabler") ?>
-                            </label>
-
                         </fieldset>
                     </td>
                 </tr>
@@ -2410,9 +2124,17 @@ final class Cache_Enabler {
                     <td>
                         <fieldset>
 							<?php foreach (get_post_types(array('public' => true)) as $post_type) : ?>
+
+                                <label for="clear_home_on_clear_by_post_id_<?php echo esc_attr($post_type) ?>">
+                                    <input type="checkbox" name="cache-enabler[clear_home_on_clear_by_post_id][<?php echo esc_attr($post_type) ?>]" id="clear_home_on_clear_by_post_id_<?php echo esc_attr($post_type) ?>" value="1" <?php checked('1', $options['clear_home_on_clear_by_post_id'][$post_type]); ?> />
+									<?php printf(__("Clear the home page cache on post edit %s.", "cache-enabler"), ('<strong>' . esc_html($post_type) . '</strong>') ); ?>
+                                </label>
+
+                                <br />
+
                                 <label for="clear_ids_on_clear_by_post_id_<?php echo esc_attr($post_type) ?>">
                                     <input type="text" name="cache-enabler[clear_ids_on_clear_by_post_id][<?php echo esc_attr($post_type) ?>]" id="clear_ids_on_clear_by_post_id_<?php echo esc_attr($post_type) ?>" value="<?php echo esc_attr($options['clear_ids_on_clear_by_post_id'][$post_type]) ?>" />
-                                    <p class="description"><?php printf( __("Additional IDs clear on edit %s. Separated by a <code>,</code> that should not be cached.", "cache-enabler"), esc_html($post_type) ); ?></p>
+                                    <p class="description"><?php printf( __("Additional IDs on edit %s. Separated by a <code>,</code> that should be clear cache.", "cache-enabler"), ('<strong>' . esc_html($post_type) . '</strong>') ) ?></p>
                                 </label>
 
                                 <br />

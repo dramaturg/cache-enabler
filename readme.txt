@@ -68,18 +68,14 @@ When combined with Optimus, the Wordpress Cache Enabler allows you to easily del
 
 == Changelog ==
 
-= 1.3.3
-* Fix return 304.
-
 = 1.3.2
-* Add support clear cache woocommerce variation.
+* Add cleaner for support third party plugins
+* Add support woocommerce and wpml.
 * Add archive page clear cache by post id.
-* Add option clear all on woocommerce stock update.
-* Add support clear cache for WPML.
 * Add param url on action "ce_action_cache_by_url_cleared"
-* Add params post id and permalink on action "ce_action_cache_by_post_id_cleared"
-* Remove clear_home class disk.
-* Add compatibility home in _clear_dir.
+* Add params post id on action "ce_action_cache_by_post_id_cleared"
+* Remove clear_home class disk and dd compatibility home in _clear_dir.
+* Bug fix cache return code 304.
 
 = 1.3.1
 * Fix for missing trailing slashes was incomplete
