@@ -65,12 +65,15 @@ final class Cache_Enabler_Cleaner {
 
     /**
      * Cache_Enabler_Cleaner constructor.
+     *
+     * @since 1.3.2
      */
     private function __construct() {
 
         $this->post_ids = array();
         $this->urls = array();
 
+        new Cache_Enabler_Autoloader(plugin_dir_path( dirname(__FILE__) ) . 'compatibility/');
         new Cache_Enabler_Woocommerce();
         new Cache_Enabler_Wpml();
     }

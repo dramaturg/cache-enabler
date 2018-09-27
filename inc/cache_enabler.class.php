@@ -61,13 +61,11 @@ final class Cache_Enabler {
      * constructor wrapper
      *
      * @since   1.0.0
-     * @change  1.3.2
+     * @change  1.0.0
      */
 
     public static function instance()
     {
-        new Cache_Enabler_Autoloader(plugin_dir_path( dirname(__FILE__) ) . 'compatibility/');
-
         new self();
     }
 
@@ -342,10 +340,13 @@ final class Cache_Enabler {
      * activation hook
      *
      * @since   1.0.0
-     * @change  1.1.1
+     * @change  1.3.2
      */
 
     public static function on_activation() {
+
+        // set default vars
+        self::_set_default_vars();
 
         // multisite and network
         if ( is_multisite() && ! empty($_GET['networkwide']) ) {
